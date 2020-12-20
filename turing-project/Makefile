@@ -1,0 +1,1 @@
+g++ turing.cpp -DDEBUG -o turing
