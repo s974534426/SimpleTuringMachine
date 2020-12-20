@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include <iostream>
-#include <fstream>
-#include <sstream>
 #include <stdlib.h>
 #include <getopt.h>
 #include "tm.h"
@@ -10,7 +8,11 @@ using namespace std;
 string filename;
 string input_str;
 
-mode parse_args(int argc, char *argv[]) {
+void print_help_info() {
+    fprintf(stderr, "usage: turing [-v|--verbose] [-h|--help] <tm> <input>\n");
+}
+
+tm_mode_t parse_args(int argc, char *argv[]) {
     static struct option long_options[] = {
         {"verbose", no_argument, NULL, 'v'}, 
         {"help", no_argument, NULL, 'h'},
@@ -18,13 +20,14 @@ mode parse_args(int argc, char *argv[]) {
     };
 
     int opt, option_idx = 0;
-    mode m = NORMAL;
+    tm_mode_t m = NORMAL;
     while((opt = getopt_long(argc, argv, "vh", long_options, &option_idx)) != -1) {
         switch(opt) {
             case 'v':
                 m = VERBOSE;
                 break;
             case 'h':
+                m = HELP;
                 break;
             default:
                 exit(-1);
@@ -43,17 +46,15 @@ mode parse_args(int argc, char *argv[]) {
     return m;
 }
 
-void help_info() {
-    printf("usage: turing [-v|--verbose] [-h|--help] <tm> <input>\n");
-}
-
 int main(int argc, char *argv[]) {
-    mode m = parse_args(argc, argv);
+    tm_mode_t m = parse_args(argc, argv);
 
-    Turing tm(filename);
-    tm.simulate(input_str, m);
-    tm.get_cur_state();
-    // tm.info();
+    if(m == HELP) {
+        print_help_info();
+    } else {
+        Turing tm(filename, m);
+        tm.simulate(input_str);
+    }
 
     return 0;
 }

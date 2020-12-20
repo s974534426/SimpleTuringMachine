@@ -72,12 +72,46 @@ void Turing::insert_state_tm(const char type, const string &state_str) {
             pt->insert(tmp_str);
 }
 
+int Turing::is_delta_illegal(const key &k, const value &v, string &error_message) const {
+    int is_illegal = 0;
+
+    if(delta.find(k) != delta.end()) {  // non deterministic transition
+        error_message = "Non deterministic transition";
+        is_illegal = 1;
+    } else if (Q.find(k.state) == Q.end()) {
+        error_message = "Invalid old state";
+        is_illegal = 1;
+    } else if (k.tape_state.size() != n_tape) {
+        error_message = "The number of old tape state is incorrect";
+        is_illegal = 1;
+    } else if (v.new_tape_state.size() != n_tape) {
+        error_message = "The number of new tape state is incorrect";
+        is_illegal = 1;
+    } else if (Q.find(v.next_state) == Q.end()) {
+        error_message = "Invalid new state";
+        is_illegal = 1;
+    }
+
+    return is_illegal;
+}
+
 void Turing::insert_delta(const string &delta_str) {
+    // read the delta transition
     istringstream istr(delta_str);
     key k;
     value v;
     istr >> k.state >> k.tape_state >> v.new_tape_state >> v.direction >> v.next_state;
     // cout << k.state << " " << k.tape_state << " " << v.new_tape_state << " " << v.direction << " " << v.next_state << endl;
+
+    // check
+    string error_message;
+    int is_illegal = is_delta_illegal(k, v, error_message);
+    if(is_illegal) {
+        fprintf(stderr, "%s\n", error_message.c_str());
+        fprintf(stderr, "syntax error\n");
+        exit(-1);
+    }
+
     delta[k] = v;
 }
 
@@ -94,40 +128,113 @@ void Turing::print_set(const set<string> &s) const {
     cout << endl;
 }
 
-Turing::Turing(const string &filename) {
+Turing::Turing(const string &filename, const tm_mode_t m) {
+    mode = m;
     build_tm(filename);        
 }
 
-void Turing::simulate(const string &input_str, const mode m) {
+void Turing::init() {
+    tape_t tmp_tape;
+    for(int i = 0; i < input_string.size(); i++)
+        tmp_tape.tape[i] = input_string[i];
+    tmp_tape.range.second = input_string.size();
+    tapes.push_back(tmp_tape);
+    
+    for(int i = 1; i < n_tape; i++) {
+        tape_t tmp_tape;
+        tapes.push_back(tmp_tape);
+    }
+
+    cur_state = q0;
+    cur_step = 0;
+}
+
+int Turing::step() {
+    string tape_state;
+    for(int i = 0; i < n_tape; i++)
+        tape_state += string(1, get_tape_state(i));
+
+    key k(cur_state, tape_state);
+    if(delta.find(k) == delta.end()) {
+        Log("No transition\n");
+        return -1;
+    } else {
+        value v = delta[k];
+        // cout << v.new_tape_state << " " << v.direction << " " << v.next_state << endl;
+        for(int i = 0; i < n_tape; i++) {
+            tapes[i].tape[tapes[i].head] = v.new_tape_state[i];
+
+            if(v.direction[i] == 'l') {
+                tapes[i].head --;
+                // exceed the leftmost position
+                if(tapes[i].head < tapes[i].range.first) {
+                    tapes[i].range.first --;
+                    tapes[i].tape[tapes[i].head] = '_';
+                }
+            } else if (v.direction[i] == 'r') {
+                tapes[i].head ++;
+                // exceed the rightmote position
+                if(tapes[i].head >= tapes[i].range.second) {
+                    tapes[i].range.second ++;
+                    tapes[i].tape[tapes[i].head] = '_';
+                }
+            } else {
+                ;  // * means no move
+            }
+
+            // there is a block in the leftmost position
+            for(; 
+                tapes[i].range.second - tapes[i].range.first > 1 && 
+                tapes[i].range.first < tapes[i].head && 
+                tapes[i].tape[tapes[i].range.first] == '_';
+                tapes[i].range.first ++
+            );
+            // there is a block in the rightmost position
+            for(;
+                tapes[i].range.second - tapes[i].range.first > 1 &&
+                tapes[i].range.second > tapes[i].head + 1 && 
+                tapes[i].tape[tapes[i].range.second-1] == '_';
+                tapes[i].range.second --
+            );
+        }
+        cur_state = v.next_state;
+        cur_step += 1;
+        return 0;
+    }
+}
+
+void Turing::simulate(const string &input_str) {
     input_string = input_str;
 
     // check input string
     int is_illegal = is_input_illegal(input_str);
     if(is_illegal != -1) {
-        print_input_illegal_info(is_illegal, m);
+        print_input_illegal_info(is_illegal);
         exit(-1);
     }
-    if(is_illegal == -1 && m == VERBOSE) {
+    if(is_illegal == -1 && mode == VERBOSE) {
         cout << "Input: " << input_string << endl;;
         cout << "==================== RUN ====================" << endl;
     }
     
     // init the tm tapes
-    vector<char> tmp_tape;
-
-    for(int i = 0; i < input_str.size(); i++) {
-        head.push_back(0);
-        tmp_tape.push_back(input_str[i]); // 这里的拷贝有问题吗
-    }
-    tapes.push_back(tmp_tape);
-
-    tmp_tape.clear();
-    for(int i = 1; i < n_tape; i++) {
-        head.push_back(0);
-        tapes.push_back(tmp_tape);
-    }
-
+    init();
+    
     // simulate
+    do {
+        if(mode == VERBOSE) 
+            print_cur_state();
+    } while (step() != -1);
+
+    // print result
+    string result = "";
+    for(int i = tapes[0].range.first; i < tapes[0].range.second; i++)
+        result += string(1, tapes[0].tape[i]);
+    if(mode == VERBOSE)
+        cout << "Result: " << result << endl <<
+             "==================== END ====================" << endl;
+    else
+        cout << result << endl;
 }
 
 void Turing::info() const {
@@ -151,17 +258,22 @@ void Turing::info() const {
     cout << "-----------------------------" << endl;
 }
 
-void Turing::get_cur_state() const {
+void Turing::print_cur_state() {
+    cout << "Step   : " << cur_step << endl;
     for(int i = 0; i < tapes.size(); i++) {
-        if(tapes[i].size() == 0) {
-            cout << "_" << endl;
-        } else {
-            for(int j = 0; j < tapes[i].size(); j++) {
-                cout << tapes[i][j] << " ";
-            }
-            cout << endl;
+        cout << "Index" << i << " : ";
+        for(int j = tapes[i].range.first; j < tapes[i].range.second; j++)
+            cout << j << " ";
+        cout << endl << "Tape" << i << "  : ";
+        for(int j = tapes[i].range.first; j < tapes[i].range.second; j++) {
+            cout << tapes[i].tape[j] << " ";
         }
+        cout << endl << "Head" << i << "  : ";
+        for(int j = 0; j < tapes[i].head - tapes[i].range.first; j++)
+            cout << "  ";
+        cout << "^" << endl;
     }
+    cout << "State  : " << cur_state << endl;
     cout << "---------------------------------------------" << endl;
 }
 
@@ -177,10 +289,10 @@ int Turing::is_input_illegal(const string &input_str) const {
     return illegal_idx;
 }
 
-void Turing::print_input_illegal_info(const int illegal_idx, const mode m) const {
-    if(m == NORMAL) {
+void Turing::print_input_illegal_info(const int illegal_idx) const {
+    if(mode == NORMAL) {
         fprintf(stderr, "illegal input\n");
-    } else if (m == VERBOSE) {
+    } else if (mode == VERBOSE) {
         fprintf(stderr, "Input: %s\n", input_string.c_str());
         fprintf(stderr, "==================== ERR ====================\n");
         fprintf(stderr, "error: '%c' was not declared in the set of input symbols\n", input_string[illegal_idx]);
