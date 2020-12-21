@@ -1,0 +1,1 @@
+accept an expression 1^mx1^n=1^mn

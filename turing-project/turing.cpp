@@ -34,11 +34,16 @@ tm_mode_t parse_args(int argc, char *argv[]) {
         }
     }
 
+    if(argc < 2 || argc > 5) {
+        print_help_info();
+        exit(-1);
+    }
+
     if(argc >= 3) {
         filename = argv[argc-2];
         input_str = argv[argc-1];
-        if(filename.size()-3 < 0 || filename.substr(filename.size()-3) != ".tm") {
-            // print error message
+        if((int)(filename.size()-3) < 0 || filename.substr(filename.size()-3) != ".tm") {
+            print_help_info();
             exit(-1);
         }
     }

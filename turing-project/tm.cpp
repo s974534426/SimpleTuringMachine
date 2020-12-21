@@ -12,6 +12,11 @@ void Turing::build_tm(const string &filename) {
     ifstream in(filename);
     string s;
 
+    if(!in.is_open()) {
+        fprintf(stderr, "Open file failed\n");
+        exit(-1);
+    }
+
     while(getline(in, s)) {
         // delete the comment and empty string
         int comment_pos = s.find(";");
@@ -107,7 +112,12 @@ void Turing::insert_delta(const string &delta_str) {
     string error_message;
     int is_illegal = is_delta_illegal(k, v, error_message);
     if(is_illegal) {
-        fprintf(stderr, "%s\n", error_message.c_str());
+        if(mode == VERBOSE) {
+            fprintf(stderr, "%s: %s %s %s %s %s\n", 
+                error_message.c_str(), k.state.c_str(), k.tape_state.c_str(),
+                v.new_tape_state.c_str(), v.direction.c_str(), v.next_state.c_str());
+        }
+            
         fprintf(stderr, "syntax error\n");
         exit(-1);
     }
@@ -135,9 +145,14 @@ Turing::Turing(const string &filename, const tm_mode_t m) {
 
 void Turing::init() {
     tape_t tmp_tape;
-    for(int i = 0; i < input_string.size(); i++)
-        tmp_tape.tape[i] = input_string[i];
-    tmp_tape.range.second = input_string.size();
+    if(input_string == "") {  // empty input
+        tmp_tape.tape[0] = '_';
+        tmp_tape.range.second = 1;
+    } else {
+        for(int i = 0; i < input_string.size(); i++)
+            tmp_tape.tape[i] = input_string[i];
+        tmp_tape.range.second = input_string.size();
+    }
     tapes.push_back(tmp_tape);
     
     for(int i = 1; i < n_tape; i++) {
@@ -160,6 +175,19 @@ int Turing::step() {
         return -1;
     } else {
         value v = delta[k];
+        if(v.new_tape_state == tape_state && v.next_state == cur_state) {
+            int inmove_flag = 1;
+            for(int i = 0; i < v.direction.size(); i++) {
+                if(v.direction[i] != '*') {
+                    inmove_flag = 0;
+                    break;
+                }
+            }
+            if(inmove_flag) {
+                Log("Dead loop\n");
+                return -1;
+            }
+        }
         // cout << v.new_tape_state << " " << v.direction << " " << v.next_state << endl;
         for(int i = 0; i < n_tape; i++) {
             tapes[i].tape[tapes[i].head] = v.new_tape_state[i];
