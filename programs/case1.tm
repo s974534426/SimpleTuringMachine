@@ -3,7 +3,7 @@
 ; Thinking:
 ; 1: copy all symbols behind the first a^ib^j pair to the 2nd tape
 ; 2: delete these symbols in the 1st tape and move both points to the leftmost position
-; 3: compare the 1st tape and 2nd tape
+; 3: compare the 1st tape and the 2nd tape
 
 #Q = {0,mr1,mr2,cp,ml,mh,cmp,accept,accept2,accept3,accept4,halt_accept,reject,reject_ml,reject_mr,reject2,reject3,reject4,reject5,halt_reject}
 
