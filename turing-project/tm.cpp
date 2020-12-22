@@ -22,9 +22,17 @@ void Turing::build_tm(const string &filename) {
         int comment_pos = s.find(";");
         if(comment_pos != -1) 
             s.erase(comment_pos);
-        if(s == "")
+
+        int is_all_blank = 1;
+        for(int i = 0; i < s.size(); i++) 
+            if(s[i] != ' ') {
+                is_all_blank = 0;
+                break;
+            }
+        if(is_all_blank) // string like: "", "    " and so on
             continue;
 
+        // add tm information
         if(s[0] == '#') {
             char line_type = s[1];
 
@@ -44,7 +52,20 @@ void Turing::build_tm(const string &filename) {
         } else {
             insert_delta(s);
         }
-        
+    }
+
+    // check after finish building the tm
+    for(map<key, value>::iterator iter=delta.begin(); iter != delta.end(); iter++) {
+        key k = iter->first;
+        value v = iter->second;
+        string error_message;
+        int is_illegal = is_delta_illegal(k, v, error_message);
+        if(is_illegal) {
+            print_delta_illegal_info(k, v, error_message);
+            
+            fprintf(stderr, "syntax error\n");
+            exit(-1);
+        }
     }
 }
 
@@ -54,22 +75,14 @@ void Turing::insert_state_tm(const char type, const string &state_str) {
     set<string> *pt = NULL;
 
     switch(type) {
-        case 'Q':
-            pt = &Q; break;
-        case 'S':
-            pt = &S; break;
-        case 'G':
-            pt = &G; break;
-        case 'q':
-            istr >> q0; break;
-        case 'B':
-            istr >> B; break;
-        case 'F':
-            pt = &F; break;
-        case 'N':
-            istr >> n_tape; break;
-        default:
-            exit(-1);
+        case 'Q': pt = &Q; break;
+        case 'S': pt = &S; break;
+        case 'G': pt = &G; break;
+        case 'q': istr >> q0; break;
+        case 'B': istr >> B; break;
+        case 'F': pt = &F; break;
+        case 'N': istr >> n_tape; break;
+        default:  exit(-1);
     }
     
     if(pt != NULL)
@@ -78,12 +91,15 @@ void Turing::insert_state_tm(const char type, const string &state_str) {
 }
 
 int Turing::is_delta_illegal(const key &k, const value &v, string &error_message) const {
-    int is_illegal = 0;
+    /**
+     * 1. check whether the state in set Q
+     * 2. check whether the number of tape state and direction is N 
+     * 3. check whether the tape symbol is in set G
+     */
 
-    if(delta.find(k) != delta.end()) {  // non deterministic transition
-        error_message = "Non deterministic transition";
-        is_illegal = 1;
-    } else if (Q.find(k.state) == Q.end()) {
+    int is_illegal = 0;
+     
+    if(Q.find(k.state) == Q.end()) {
         error_message = "Invalid old state";
         is_illegal = 1;
     } else if (k.tape_state.size() != n_tape) {
@@ -92,12 +108,45 @@ int Turing::is_delta_illegal(const key &k, const value &v, string &error_message
     } else if (v.new_tape_state.size() != n_tape) {
         error_message = "The number of new tape state is incorrect";
         is_illegal = 1;
+    } else if (v.direction.size() != n_tape) {
+        error_message = "The number of tape head direction is incorrect";
+        is_illegal = 1;
     } else if (Q.find(v.next_state) == Q.end()) {
         error_message = "Invalid new state";
         is_illegal = 1;
+    } else {
+        for(int i = 0; i < k.tape_state.size(); i++) {
+            if(G.find(string(1, k.tape_state[i])) == G.end()) {
+                error_message = "Incorrect tape symbol in old tape state";
+                is_illegal = 1;
+                break;
+            }
+        }
+        for(int i = 0; i < v.new_tape_state.size(); i++) {
+            if(G.find(string(1, v.new_tape_state[i])) == G.end()) {
+                error_message = "Incorrect tape symbol in new tape state";
+                is_illegal = 1;
+                break;
+            }
+        }
+        for(int i = 0; i < v.direction.size(); i++) {
+            if(v.direction[i] != 'l' && v.direction[i] != 'r' && v.direction[i] != '*') {
+                error_message = "Incorrect direction symbol";
+                is_illegal = 1;
+                break;
+            }
+        }
     }
 
     return is_illegal;
+}
+
+void Turing::print_delta_illegal_info(const key &k, const value &v, string &error_message) const {
+    if(mode == VERBOSE) {
+        fprintf(stderr, "%s: %s %s %s %s %s\n", 
+            error_message.c_str(), k.state.c_str(), k.tape_state.c_str(),
+            v.new_tape_state.c_str(), v.direction.c_str(), v.next_state.c_str());
+    }
 }
 
 void Turing::insert_delta(const string &delta_str) {
@@ -108,20 +157,16 @@ void Turing::insert_delta(const string &delta_str) {
     istr >> k.state >> k.tape_state >> v.new_tape_state >> v.direction >> v.next_state;
     // cout << k.state << " " << k.tape_state << " " << v.new_tape_state << " " << v.direction << " " << v.next_state << endl;
 
-    // check
+    // check non deterministic delta transition
     string error_message;
-    int is_illegal = is_delta_illegal(k, v, error_message);
-    if(is_illegal) {
-        if(mode == VERBOSE) {
-            fprintf(stderr, "%s: %s %s %s %s %s\n", 
-                error_message.c_str(), k.state.c_str(), k.tape_state.c_str(),
-                v.new_tape_state.c_str(), v.direction.c_str(), v.next_state.c_str());
-        }
+    if(delta.find(k) != delta.end()) {
+        error_message = "Non deterministic transition";
+        print_delta_illegal_info(k, v, error_message);
             
         fprintf(stderr, "syntax error\n");
         exit(-1);
     }
-
+    
     delta[k] = v;
 }
 
@@ -144,6 +189,7 @@ Turing::Turing(const string &filename, const tm_mode_t m) {
 }
 
 void Turing::init() {
+    // init the 1st tape
     tape_t tmp_tape;
     if(input_string == "") {  // empty input
         tmp_tape.tape[0] = '_';
@@ -155,11 +201,13 @@ void Turing::init() {
     }
     tapes.push_back(tmp_tape);
     
+    // init the other tapes
     for(int i = 1; i < n_tape; i++) {
         tape_t tmp_tape;
         tapes.push_back(tmp_tape);
     }
 
+    // init the state
     cur_state = q0;
     cur_step = 0;
 }
@@ -289,17 +337,37 @@ void Turing::info() const {
 void Turing::print_cur_state() {
     cout << "Step   : " << cur_step << endl;
     for(int i = 0; i < tapes.size(); i++) {
+        int *aligned_offset = new int[tapes[i].range.second - tapes[i].range.first + 1]; 
+        aligned_offset[0] = 0;
+
         cout << "Index" << i << " : ";
-        for(int j = tapes[i].range.first; j < tapes[i].range.second; j++)
+        for(int j = tapes[i].range.first; j < tapes[i].range.second; j++) {
+            ostringstream ostr;
+            ostr << j;
+            aligned_offset[j - tapes[i].range.first + 1] = ostr.str().size() + 1;
+
             cout << j << " ";
+        }
+            
         cout << endl << "Tape" << i << "  : ";
         for(int j = tapes[i].range.first; j < tapes[i].range.second; j++) {
+            for(int k = 0; k < aligned_offset[j - tapes[i].range.first]-2; k++) // print blank to left aligned
+                cout << " ";
             cout << tapes[i].tape[j] << " ";
         }
+        
         cout << endl << "Head" << i << "  : ";
-        for(int j = 0; j < tapes[i].head - tapes[i].range.first; j++)
+        for(int j = tapes[i].range.first; j < tapes[i].head+1; j++) {
+            for(int k = 0; k < aligned_offset[j - tapes[i].range.first]-2; k++) // print blank to left aligned
+                cout << " ";
+        }
+        for(int j = 0; j < tapes[i].head - tapes[i].range.first; j++) {
             cout << "  ";
+        }
+            
         cout << "^" << endl;
+
+        delete aligned_offset;
     }
     cout << "State  : " << cur_state << endl;
     cout << "---------------------------------------------" << endl;

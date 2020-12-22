@@ -1,7 +1,7 @@
 ; case1: check if the input string is in the language {a^ib^ja^ib^j | i, j > 0}
 ;
 ; Thinking:
-; 1: copy all symbols behind the first a^ib^j pair to the 2nd tape
+; 1: copy all symbols behind the first 'a^ib^j' pair to the 2nd tape
 ; 2: delete these symbols in the 1st tape and move both points to the leftmost position
 ; 3: compare the 1st tape and the 2nd tape
 
@@ -36,12 +36,12 @@ mr2 b_ b_ r* mr2
 mr2 a_ aa rr cp
 mr2 __ __ l* reject_ml
 
-; State cp: copy the symbols to the 2nd tape
+; State cp: copy the symbols behind the first 'a^ib^j' pair to the 2nd tape
 cp a_ aa rr cp
 cp b_ bb rr cp
 cp __ __ ll ml
 
-; State ml: move left and replace symbol in the 1st tape with block until meeting a block in the 2nd tape
+; State ml: move left and delete symbol in the 1st tape with block until meeting a block in the 2nd tape
 ml aa _a ll ml
 ml ab _b ll ml
 ml ba _a ll ml
@@ -71,7 +71,7 @@ accept2 __ r_ r* accept3
 accept3 __ u_ r* accept4
 accept4 __ e_ ** halt_accept
 
-; State reject_ml: move the 2 tapes to the leftmost position
+; State reject_ml: move the 2 tape heads to the left
 reject_ml aa aa ll reject_ml
 reject_ml ab ab ll reject_ml
 reject_ml ba ba ll reject_ml
