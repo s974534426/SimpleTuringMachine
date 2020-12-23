@@ -367,7 +367,7 @@ void Turing::print_cur_state() {
             
         cout << "^" << endl;
 
-        delete aligned_offset;
+        delete []aligned_offset;
     }
     cout << "State  : " << cur_state << endl;
     cout << "---------------------------------------------" << endl;
